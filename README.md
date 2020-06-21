@@ -9,4 +9,4 @@ This project is aimed at automating as much of the incident response process in 
     Remediation: Remediate compromised EC2 instances, redeploy AMIs, etc.
     
     
-    Eventually I think I'll turn this into an AWS Step Function... we'll see. 
+ Eventually I think I'll turn this into an AWS Step Function... we'll see. 
