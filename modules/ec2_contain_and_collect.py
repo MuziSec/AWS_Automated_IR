@@ -6,6 +6,30 @@ from base64 import b64decode
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
+def collect_metadata(instance_id):
+    # TO DO: Collect instance metadata with get_all_instances(instance_ids=instance_id)
+    return
+
+def enable_termination_protection:
+    # TO DO: Enable EC2 termination protection to prevent accidental shutdown
+    return
+
+def isolate_ec2:
+    # TO DO: Switch VPC Security Group to isolate the instance
+    return
+
+def deteach_autoscaling:
+    # TO DO: Detach the EC2 instance from Auto Scaling Groups if applicable
+    return
+
+def deregister_elb_service:
+    # TO DO: Deregister the EC2 instance from any ELB service
+    return
+
+def snapshot_ec2:
+    # TO DO: Refactor EC2 snapshot code to this function
+    return
+
 def lambda_handler(event, context):
     
     detail = event['detail']
