@@ -7,3 +7,6 @@ This project is aimed at automating as much of the incident response process in 
     Artifact Collection and Analysis: Collect forensic artifacts using tools such as margaritashotgun, snapshots, live response scripts, etc. Collect this data and upload to specified S3 bucket for easy access from IR VPC/Forensic analysis machines.
 
     Remediation: Remediate compromised EC2 instances, redeploy AMIs, etc.
+    
+    
+    Eventually I think I'll turn this into an AWS Step Function... we'll see. 
