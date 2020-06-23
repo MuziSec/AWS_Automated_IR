@@ -3,38 +3,66 @@ import json
 import os
 
 from base64 import b64decode
-from urllib.request import Request, urlopen
-from urllib.error import URLError, HTTPError
+import urllib3
 
-def collect_metadata(instance_id):
-    # TO DO: Collect instance metadata with get_all_instances(instance_ids=instance_id)
-    return
+def collect_metadata(ec2, instance_id):
+    response = ec2.describe_instances(InstanceIds=[instance_id],)
+    return response
 
-def enable_termination_protection:
+def enable_termination_protection(ec2, instance_id):
     # TO DO: Enable EC2 termination protection to prevent accidental shutdown
+    # Check to see if already enabled
+    check_term_protection = ec2.describe_instance_attribute(InstanceId=instance_id, Attribute='disableApiTermination')
+    protection_value = check_term_protection['DisableApiTermination']['Value']
+    print(f'Protection value is: {protection_value}')
+    if protection_value == True:
+        return True
+    else:
+        new_protection_value = ec2.modify_instance_attribute(InstanceId=instance_id, Attribute='disableApiTermination', Value='True')
+        if new_protection_value == True:
+            return True
+        else:
+            return "EC2 termination protection couldn't be turned on."
     return
 
-def isolate_ec2:
+def get_volumes(ec2, instance_id):
+    # Get all volumes in use for region
+    volumes = ec2.describe_volumes( Filters=[{'Name': 'status', 'Values': ['in-use']}])
+    # List to store EBS volumes in use by EC2 instance
+    ir_volumes = []
+    # Loop through volumes and identify any volumes in use by EC2 of interest
+    for volume in volumes['Volumes']:
+        if volume['Attachments'][0]['InstanceId'] == instance_id:
+            ir_volumes.append(volume)
+    return ir_volumes
+
+def isolate_ec2(ec2):
     # TO DO: Switch VPC Security Group to isolate the instance
     return
 
-def deteach_autoscaling:
+def deteach_autoscaling(ec2):
     # TO DO: Detach the EC2 instance from Auto Scaling Groups if applicable
     return
 
-def deregister_elb_service:
+def deregister_elb_service(ec2):
     # TO DO: Deregister the EC2 instance from any ELB service
     return
 
-def snapshot_ec2:
-    # TO DO: Refactor EC2 snapshot code to this function
-    return
+def snapshot_ec2(ec2, instance_id):
+    # Loop through volumes of interest and snapshot them
+    ir_volumes = get_volumes(ec2, instance_id)
+    for volume in ir_volumes:
+        print(volume['Attachments'][0]['VolumeId'])
+        volume_id = volume['Attachments'][0]['VolumeId']
+        result = ec2.create_snapshot(VolumeId=volume_id,Description='Created by security team IR lambda function.')
+    return result
+
 
 def lambda_handler(event, context):
     
     detail = event['detail']
-    print(f'This is the event: {event}')
-    print(f'Event detail: {detail}')
+    # print(f'This is the event: {event}')
+    # print(f'Event detail: {detail}')
     
     # If this event is not about an ec2 instance, exit
     if not detail['service'] == 'ec2' and detail['resource-type'] == 'instance':
@@ -49,33 +77,17 @@ def lambda_handler(event, context):
     handler for lambda.
     '''
     if 'IR_Contained' in detail['changed-tag-keys'] and 'IR_Contained' in detail['tags']:
-        print('IR_Contained is in changed tag keys and current tags.')
+        # print('IR_Contained is in changed tag keys and current tags.')
         
         # Grab EC2 instance_id from Event
         instance_id = event['resources'][0].split("/")[1]
-        print(instance_id)
         
-        # Get all volumes in use for region
-        volumes = ec2.describe_volumes( Filters=[{'Name': 'status', 'Values': ['in-use']}])
-        # List to store EBS volumes in use by EC2 instance
-        ir_volumes = []
-        # Loop through volumes and identify any volumes in use by EC2 of interest
-        for volume in volumes['Volumes']:
-            if volume['Attachments'][0]['InstanceId'] == instance_id:
-                ir_volumes.append(volume)
-                
-                
-        # Loop through volumes of interest and snapshot them
-        for volume in ir_volumes:
-            print(volume['Attachments'][0]['VolumeId'])
-            volume_id = volume['Attachments'][0]['VolumeId']
-            result = ec2.create_snapshot(VolumeId=volume_id,Description='Created by security team IR lambda function.')
-            print(result)
+        # Get EC2 instance metadata
+        #print(collect_metadata(ec2, instance_id))
         
-    
-    
-
-
-    
-
-
+        # Prevent EC2 termination 
+        print(enable_termination_protection(ec2, instance_id))
+        
+        # Snapshot EC2
+        # print(snapshot_ec2(ec2, instance_id))
+        
