@@ -62,9 +62,29 @@ def isolate_ec2(ec2):
     # TO DO: Switch VPC Security Group to isolate the instance
     return
 
-def deteach_autoscaling(ec2):
-    # TO DO: Detach the EC2 instance from Auto Scaling Groups if applicable
-    return
+def detach_autoscaling(ec2, instance_id):
+    # Get autoscaling group names for instance
+    autoscaling = boto3.client('autoscaling')
+    try:
+        asg_response = autoscaling.describe_auto_scaling_instances(InstanceIds=[instance_id],)
+    except Exception as e:
+        return(f'There was an issue describing the instance: {e}')
+    # Store all asgs for the instance in asg dict
+    asg_dict = {}    
+    # Remove from asg
+    for asi in asg_response['AutoScalingInstances']:
+        asg = asi['AutoScalingGroupName']
+        try:
+            response = autoscaling.detach_instances(InstanceIds=[instance_id], AutoScalingGroupName=asg, ShouldDecrementDesiredCapacity=True)
+        except Exception as e:
+            return(f'There was an issue detaching {instance_id} from {asg}: {e}')
+        
+        # Check if successfully detached and return results
+        if 'Detaching' in response['Activities'][0]['Description']:
+            asg_dict[asg] = response['Activities'][0]['Description']
+        else:
+            asg_dict[asg] = "Failed to detach from auto scaling group."
+    return asg_dict
 
 def deregister_elb_service(ec2):
     # TO DO: Deregister the EC2 instance from any ELB service
@@ -80,7 +100,7 @@ def snapshot_ec2(ec2, instance_id):
         try:
             result = ec2.create_snapshot(VolumeId=volume_id,Description='Created by security team IR lambda function.')
         except Exception as e:
-            return(f'There was an exception creating the snapshot: {e}')
+            print(f'There was an exception creating the snapshot: {e}')
                     # print(f'Result of create snapshot: {result}')
         if "snap" in result['SnapshotId']:
             response_dict[volume_id] = result['SnapshotId']
@@ -114,6 +134,7 @@ def lambda_handler(event, context):
         # Grab EC2 instance_id from Event
         instance_id = event['resources'][0].split("/")[1]
         
+        
         # Get EC2 instance metadata
         print(collect_metadata(ec2, instance_id))
         
@@ -130,3 +151,6 @@ def lambda_handler(event, context):
         
         # Snapshot EC2
         print(f'Here are the corresponding snapshots: (snapshot_ec2(ec2, instance_id))')
+        
+        print(detach_autoscaling(ec2, instance_id))
+        
