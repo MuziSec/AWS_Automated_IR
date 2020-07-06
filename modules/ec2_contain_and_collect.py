@@ -58,11 +58,11 @@ def get_volumes(ec2, instance_id):
             ir_volumes.append(volume)
     return ir_volumes
 
-def isolate_ec2(ec2):
+def isolate_ec2(ec2, instance_id):
     # TO DO: Switch VPC Security Group to isolate the instance
     return
 
-def detach_autoscaling(ec2, instance_id):
+def detach_autoscaling(instance_id):
     # Get autoscaling group names for instance
     autoscaling = boto3.client('autoscaling')
     try:
@@ -79,16 +79,42 @@ def detach_autoscaling(ec2, instance_id):
         except Exception as e:
             return(f'There was an issue detaching {instance_id} from {asg}: {e}')
         
-        # Check if successfully detached and return results
+        # Check if successfully detached
         if 'Detaching' in response['Activities'][0]['Description']:
             asg_dict[asg] = response['Activities'][0]['Description']
         else:
             asg_dict[asg] = "Failed to detach from auto scaling group."
     return asg_dict
 
-def deregister_elb_service(ec2):
-    # TO DO: Deregister the EC2 instance from any ELB service
-    return
+def deregister_elb_service(instance_id):
+    # Get ELB Names
+    elb = boto3.client('elb')
+    try:
+        elb_response = elb.describe_load_balancers()
+    except Exception as e:
+        return(f'There was an issue describing the load balancers: {e}')
+    # Store all elbs for the instance in elb dict
+    elb_dict = {}
+    # Remove from ELB
+    for load_balancer in elb_response['LoadBalancerDescriptions']:
+        load_balancer_name = load_balancer['LoadBalancerName']
+        try:
+            deregister_response = elb.deregister_instances_from_load_balancer(
+                LoadBalancerName=load_balancer_name, 
+                Instances=[
+                    {
+                        'InstanceId': instance_id
+                    },
+                ]
+            )
+        except Exception as e:
+            return(f'There was an issue deregistering {instance_id} from ELB: {load_balancer_name}: {e}')
+        # Check if instance successfully deregistered from ELB
+        if instance_id not in [instance['InstanceId'] for instance in deregister_response['Instances']]:
+            elb_dict[load_balancer_name] = f'{instance_id} successfully deregistered from {load_balancer_name}'
+        else:
+            elb_dict[load_balancer_name] = f'{instance_id} failed to deregister from {load_balancer_name}'
+    return elb_dict
 
 def snapshot_ec2(ec2, instance_id):
     # Loop through volumes of interest and snapshot them
@@ -108,7 +134,23 @@ def snapshot_ec2(ec2, instance_id):
             response_dict[volume_id] = "failed"
         
     return response_dict
+    
+def capture_memory(instance_id, aws_region):
 
+    ssm_client = boto3.client('ssm', region_name=aws_region)
+
+    response = ssm_client.send_command(
+        InstanceIds=[
+            instance_id
+        ],
+        DocumentName="AWS-RunShellScript",
+        Parameters={
+            'commands':[
+                'ifconfig'
+            ]
+        },
+    )
+    print(f'SSM Response: {response}')
 
 def lambda_handler(event, context):
     
@@ -120,8 +162,12 @@ def lambda_handler(event, context):
     if not detail['service'] == 'ec2' and detail['resource-type'] == 'instance':
         return
     
+    # Get AWS Region for Event so lambda can handle any region
+    aws_region = event['region']
+    
     # init boto3 client
-    ec2 = boto3.client('ec2', region_name='us-east-1')
+    # In future, this should be updated to work with all regions
+    ec2 = boto3.client('ec2', region_name=aws_region)
 
     '''
     Check to ensure the tag in this event has been added and the tag remains on the host.
@@ -133,8 +179,9 @@ def lambda_handler(event, context):
         
         # Grab EC2 instance_id from Event
         instance_id = event['resources'][0].split("/")[1]
+        print(f'Main: {instance_id}')
         
-        
+        '''
         # Get EC2 instance metadata
         print(collect_metadata(ec2, instance_id))
         
@@ -152,5 +199,14 @@ def lambda_handler(event, context):
         # Snapshot EC2
         print(f'Here are the corresponding snapshots: (snapshot_ec2(ec2, instance_id))')
         
-        print(detach_autoscaling(ec2, instance_id))
         
+        # Detach EC2 from autoscaling
+        print(detach_autoscaling(instance_id))
+        
+        
+        #Deregister Load Balancers
+        print(deregister_elb_service(instance_id))
+        '''
+        
+        # Capture Memory
+        capture_memory(instance_id, aws_region)
