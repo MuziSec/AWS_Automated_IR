@@ -1,0 +1,23 @@
+{
+  "version": "0",
+  "id": "bddcf1d6-0251-35a1-aab0-adc1fb47c11c",
+  "detail-type": "Tag Change on Resource",
+  "source": "aws.tag",
+  "account": "123456789012",
+  "time": "2018-09-18T20:41:38Z",
+  "region": "us-east-1",
+  "resources": [
+    "arn:aws:ec2:us-east-1:123456789012:instance/i-01d287595e96ba323"
+  ],
+  "detail": {
+    "changed-tag-keys": [
+      "IR_Contained"
+    ],
+    "service": "ec2",
+    "resource-type": "instance",
+    "version": 3,
+    "tags": {
+      "IR_Contained": "This EC2 instance has been contained by the security incident response team. Please reach out to the security team for additional information."
+    }
+  }
+}

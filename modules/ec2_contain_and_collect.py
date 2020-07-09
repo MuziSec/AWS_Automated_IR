@@ -1,6 +1,7 @@
 import boto3
 import json
 import os
+import time
 
 from base64 import b64decode
 import urllib3
@@ -144,13 +145,48 @@ def capture_memory(instance_id, aws_region):
             instance_id
         ],
         DocumentName="AWS-RunShellScript",
+        # TimeoutSeconds=1800,
         Parameters={
             'commands':[
-                'ifconfig'
+                'sudo ~/avml /tmp/memdump.lime'
             ]
         },
     )
-    print(f'SSM Response: {response}')
+    
+    command_id = response['Command']['CommandId']
+    instance_id = response['Command']['InstanceIds'][0]
+    time.sleep(2)
+    response = ssm_client.get_command_invocation(CommandId=command_id, InstanceId=instance_id)
+    output = response['StandardOutputContent']
+    print(f'Response output is: {output}')
+    
+def build_volatility_profile(instance_id, aws_region, kernel):
+    
+    ssm_client = boto3.client('ssm', region_name=aws_region)
+    
+    cmd1 = f'cd ~/volatility/tools/linux/'
+    cmd2 = f'sudo make'
+    cmd3 = f'sudo zip "~/`uname -r`.zip" module.dwarf /boot/System.map-`uname -r`'
+    
+    response = ssm_client.send_command(
+        InstanceIds=[
+            instance_id
+        ],
+        DocumentName="AWS-RunShellScript",
+        # TimeoutSeconds=1800,
+        Parameters={
+            'commands':[
+                cmd1,
+                cmd2,
+                cmd3
+            ]
+        },
+    )
+    if response['Status'] == 'Success':
+        return True
+    else:
+        return False
+
 
 def lambda_handler(event, context):
     
@@ -209,4 +245,7 @@ def lambda_handler(event, context):
         '''
         
         # Capture Memory
-        capture_memory(instance_id, aws_region)
+        # capture_memory(instance_id, aws_region)
+        
+        # Build Volatility Profile
+        build_volatility_profile(instance_id, aws_region, kernel)
