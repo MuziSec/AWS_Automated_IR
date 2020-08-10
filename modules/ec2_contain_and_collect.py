@@ -160,6 +160,7 @@ def capture_memory(instance_id, aws_region):
     output = response['StandardOutputContent']
     print(f'Response output is: {output}')
     
+
 def build_volatility_profile(instance_id, aws_region):
     # Add profile to volatility/volatility/plugins/overlays/linux/ and then add x64 or x32 to name of zip (and exclude .zip)
     ssm_client = boto3.client('ssm', region_name=aws_region)
@@ -175,7 +176,7 @@ def build_volatility_profile(instance_id, aws_region):
     cmd8 = f'zip /home/ec2-user/Linux_`uname -r`.zip tools/linux/module.dwarf /boot/System.map-`uname -r`'
     cmd9 = f'cp /home/ec2-user/Linux_`uname -r`.zip volatility/plugins/overlays/linux/'
     cmd10 = f'ls /home/ec2-user/*.zip'
-
+    
     response = ssm_client.send_command(
         InstanceIds=[
             instance_id
