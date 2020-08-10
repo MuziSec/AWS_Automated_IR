@@ -1,6 +1,7 @@
 import boto3
 import json
 import os
+import time
 
 from base64 import b64decode
 import urllib3
@@ -144,13 +145,70 @@ def capture_memory(instance_id, aws_region):
             instance_id
         ],
         DocumentName="AWS-RunShellScript",
+        # TimeoutSeconds=1800,
         Parameters={
             'commands':[
-                'ifconfig'
+                '/root/avml /root/memdump.lime'
             ]
         },
     )
-    print(f'SSM Response: {response}')
+    
+    command_id = response['Command']['CommandId']
+    instance_id = response['Command']['InstanceIds'][0]
+    time.sleep(2)
+    response = ssm_client.get_command_invocation(CommandId=command_id, InstanceId=instance_id)
+    output = response['StandardOutputContent']
+    print(f'Response output is: {output}')
+    
+def build_volatility_profile(instance_id, aws_region):
+    # Add profile to volatility/volatility/plugins/overlays/linux/ and then add x64 or x32 to name of zip (and exclude .zip)
+    ssm_client = boto3.client('ssm', region_name=aws_region)
+    
+    cmd0 = f'sudo su ec2-user'
+    cmd1 = f'sudo yum install -y kernel-devel-$(uname -r)'
+    cmd2 = f'sudo yum install -y libdwarf-tools'
+    cmd3 = f'git clone https://github.com/volatilityfoundation/volatility.git /home/ec2-user/volatility'
+    cmd4 = f'sudo chown -R ec2-user /home/ec2-user/volatility/tools/linux'
+    cmd5 = f'cd /home/ec2-user/volatility/tools/linux/'
+    cmd6 = f'make'
+    cmd7 = f'cd /home/ec2-user/volatility'
+    cmd8 = f'zip /home/ec2-user/Linux_`uname -r`.zip tools/linux/module.dwarf /boot/System.map-`uname -r`'
+    cmd9 = f'cp /home/ec2-user/Linux_`uname -r`.zip volatility/plugins/overlays/linux/'
+    cmd10 = f'ls /home/ec2-user/*.zip'
+
+    response = ssm_client.send_command(
+        InstanceIds=[
+            instance_id
+        ],
+        DocumentName="AWS-RunShellScript",
+        # TimeoutSeconds=1800,
+        Parameters={
+            'commands':[
+                cmd1,
+                cmd2,
+                cmd3,
+                cmd4,
+                cmd5,
+                cmd6,
+                cmd7,
+                cmd8,
+                cmd9,
+                cmd10
+
+            ]
+        },
+    )
+    
+    cmdId = response.get("Command").get("CommandId")
+
+    time.sleep(30)
+    
+    cmd_response = ssm_client.get_command_invocation(
+        CommandId=cmdId,
+        InstanceId=instance_id
+    )
+    print(f'Command Response: {cmd_response}')
+
 
 def lambda_handler(event, context):
     
@@ -164,49 +222,46 @@ def lambda_handler(event, context):
     
     # Get AWS Region for Event so lambda can handle any region
     aws_region = event['region']
+    print(f'Region: {aws_region}')
     
     # init boto3 client
     # In future, this should be updated to work with all regions
     ec2 = boto3.client('ec2', region_name=aws_region)
 
+        
+    # Grab EC2 instance_id from Event
+    instance_id = event['resources'][0].split("/")[1]
+    print(f'Instance: {instance_id}')
+    
+    
+    # Get EC2 instance metadata
+    print(collect_metadata(ec2, instance_id))
     '''
-    Check to ensure the tag in this event has been added and the tag remains on the host.
-    This ensures that when the tag is removed, this lambda isn't run again. This will serve as main
-    handler for lambda.
+    # Prevent EC2 termination 
+    
+    term_protection = enable_termination_protection(ec2, instance_id)
+    if term_protection == True:
+        print("Termination Protection enabled successfully.")
+    elif term_protection == False:
+        print("Termination Protection couldn't be turned on.")
+    else:
+        print(term_protection)
+    
+    
+    # Snapshot EC2
+    print(f'Here are the corresponding snapshots: (snapshot_ec2(ec2, instance_id))')
+    
+    
+    # Detach EC2 from autoscaling
+    print(detach_autoscaling(instance_id))
+    
+    
+    #Deregister Load Balancers
+    print(deregister_elb_service(instance_id))
     '''
-    if 'IR_Contained' in detail['changed-tag-keys'] and 'IR_Contained' in detail['tags']:
-        # print('IR_Contained is in changed tag keys and current tags.')
-        
-        # Grab EC2 instance_id from Event
-        instance_id = event['resources'][0].split("/")[1]
-        print(f'Main: {instance_id}')
-        
-        '''
-        # Get EC2 instance metadata
-        print(collect_metadata(ec2, instance_id))
-        
-        # Prevent EC2 termination 
-        
-        term_protection = enable_termination_protection(ec2, instance_id)
-        if term_protection == True:
-            print("Termination Protection enabled successfully.")
-        elif term_protection == False:
-            print("Termination Protection couldn't be turned on.")
-        else:
-            print(term_protection)
-        
-        
-        # Snapshot EC2
-        print(f'Here are the corresponding snapshots: (snapshot_ec2(ec2, instance_id))')
-        
-        
-        # Detach EC2 from autoscaling
-        print(detach_autoscaling(instance_id))
-        
-        
-        #Deregister Load Balancers
-        print(deregister_elb_service(instance_id))
-        '''
-        
-        # Capture Memory
-        capture_memory(instance_id, aws_region)
+    
+    # Capture Memory
+    #capture_memory(instance_id, aws_region)
+    
+    # Build Volatility Profile
+    build_volatility_profile(instance_id, aws_region)
