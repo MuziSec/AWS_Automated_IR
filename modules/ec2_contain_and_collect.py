@@ -159,7 +159,6 @@ def capture_memory(instance_id, aws_region):
     response = ssm_client.get_command_invocation(CommandId=command_id, InstanceId=instance_id)
     output = response['StandardOutputContent']
     print(f'Response output is: {output}')
-    
 
 def build_volatility_profile(instance_id, aws_region):
     # Add profile to volatility/volatility/plugins/overlays/linux/ and then add x64 or x32 to name of zip (and exclude .zip)
@@ -176,7 +175,7 @@ def build_volatility_profile(instance_id, aws_region):
     cmd8 = f'zip /home/ec2-user/Linux_`uname -r`.zip tools/linux/module.dwarf /boot/System.map-`uname -r`'
     cmd9 = f'cp /home/ec2-user/Linux_`uname -r`.zip volatility/plugins/overlays/linux/'
     cmd10 = f'ls /home/ec2-user/*.zip'
-    
+
     response = ssm_client.send_command(
         InstanceIds=[
             instance_id
@@ -209,7 +208,51 @@ def build_volatility_profile(instance_id, aws_region):
         InstanceId=instance_id
     )
     print(f'Command Response: {cmd_response}')
+    
+def get_s3_presigned(bucket_name, object_name, expiration=7200):
+    '''Generate a pre-signed URL to allow S3 upload of files'''
+    s3 = boto3.client('s3')
+    
+    try:
+        response = s3.generate_presigned_url('get_object', Params={'Bucket': bucket_name, 'Key': object_name}, ExpiresIn=expiration, HttpMethod='PUT')
+    except ClientError as e:
+        print(f'There was an error generating the presigned url: {e}')
+        return None
+    return response
 
+def get_files(instance_id, aws_region):
+    '''Get pre-signed URL upload memdump and volatility profile'''
+    memdump_url = get_s3_presigned('s3_bucket', 'memdump')
+    print(f'Memdump URL: {memdump_url}')
+    
+    # open ssm client
+    ssm_client = boto3.client('ssm', region_name=aws_region)
+    
+    cmd0 = f'curl -v --upload-file /home/ec2-user/memdump.lime {memdump_url}'
+    
+    response = ssm_client.send_command(
+        InstanceIds=[
+            instance_id
+        ],
+        DocumentName="AWS-RunShellScript",
+        # TimeoutSeconds=1800,
+        Parameters={
+            'commands':[
+                cmd0
+
+            ]
+        },
+    )
+    
+    cmdId = response.get("Command").get("CommandId")
+    
+    time.sleep(30)
+    
+    cmd_response = ssm_client.get_command_invocation(
+        CommandId=cmdId,
+        InstanceId=instance_id
+    )
+    print(f'Command Response: {cmd_response}')
 
 def lambda_handler(event, context):
     
@@ -223,7 +266,7 @@ def lambda_handler(event, context):
     
     # Get AWS Region for Event so lambda can handle any region
     aws_region = event['region']
-    print(f'Region: {aws_region}')
+    # print(f'Region: {aws_region}')
     
     # init boto3 client
     # In future, this should be updated to work with all regions
@@ -232,11 +275,11 @@ def lambda_handler(event, context):
         
     # Grab EC2 instance_id from Event
     instance_id = event['resources'][0].split("/")[1]
-    print(f'Instance: {instance_id}')
+    # print(f'Instance: {instance_id}')
     
     
     # Get EC2 instance metadata
-    print(collect_metadata(ec2, instance_id))
+    # print(collect_metadata(ec2, instance_id))
     '''
     # Prevent EC2 termination 
     
@@ -265,4 +308,8 @@ def lambda_handler(event, context):
     #capture_memory(instance_id, aws_region)
     
     # Build Volatility Profile
-    build_volatility_profile(instance_id, aws_region)
+    # build_volatility_profile(instance_id, aws_region)
+    
+    # Upload Files to S3
+    get_files(instance_id, aws_region)
+
