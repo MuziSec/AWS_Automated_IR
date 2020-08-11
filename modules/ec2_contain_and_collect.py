@@ -159,7 +159,7 @@ def capture_memory(instance_id, aws_region):
     response = ssm_client.get_command_invocation(CommandId=command_id, InstanceId=instance_id)
     output = response['StandardOutputContent']
     print(f'Response output is: {output}')
-    
+
 def build_volatility_profile(instance_id, aws_region):
     # Add profile to volatility/volatility/plugins/overlays/linux/ and then add x64 or x32 to name of zip (and exclude .zip)
     ssm_client = boto3.client('ssm', region_name=aws_region)
@@ -222,7 +222,7 @@ def get_s3_presigned(bucket_name, object_name, expiration=7200):
 
 def get_files(instance_id, aws_region):
     '''Get pre-signed URL upload memdump and volatility profile'''
-    memdump_url = get_s3_presigned('jared-memory-capture-test', 'memdump')
+    memdump_url = get_s3_presigned('s3_bucket', 'memdump')
     print(f'Memdump URL: {memdump_url}')
     
     # open ssm client
@@ -253,7 +253,6 @@ def get_files(instance_id, aws_region):
         InstanceId=instance_id
     )
     print(f'Command Response: {cmd_response}')
-    
 
 def lambda_handler(event, context):
     
@@ -313,3 +312,4 @@ def lambda_handler(event, context):
     
     # Upload Files to S3
     get_files(instance_id, aws_region)
+
